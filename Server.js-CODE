@@ -1,0 +1,674 @@
+// Error handling for missing modules
+try {
+    var express = require('express');
+    var cors = require('cors');
+    var bodyParser = require('body-parser');
+  } catch (err) {
+    console.error('❌ ERROR: Missing dependencies!');
+    console.error('Please run: npm install');
+    console.error('Error details:', err.message);
+    process.exit(1);
+  }
+  
+  const path = require('path');
+  const fs = require('fs');
+  
+  const app = express();
+  const PORT = process.env.PORT || 3000;
+  
+  // Verify port is available
+  console.log('🔍 Starting EduBot server...');
+  console.log('🔍 Port:', PORT);
+  
+  // Middleware setup
+  app.use(cors());
+  app.use(bodyParser.json());
+  app.use(bodyParser.urlencoded({ extended: true }));
+  app.use(express.static(__dirname)); // serve index.html, styles, scripts from data/
+  
+  // Load university dataset (Vel Tech by default)
+  const UNIVERSITY_DATA_PATH = process.env.UNIVERSITY_DATA_PATH || path.join(__dirname, 'veltech.json');
+  let universityData = null;
+  try {
+    const raw = fs.readFileSync(UNIVERSITY_DATA_PATH, 'utf-8');
+    universityData = JSON.parse(raw);
+    console.log('📚 Loaded university dataset:', UNIVERSITY_DATA_PATH);
+  } catch (err) {
+    console.warn('⚠️  Could not load university dataset:', err.message);
+  }
+  
+  // Simple rule-based /api/chat endpoint
+  app.post('/api/chat', (req, res) => {
+    const message = (req.body && req.body.message) ? String(req.body.message).toLowerCase() : '';
+    const replyParts = [];
+    let confidence = 70;
+    const topics = [];
+    const suggestions = new Set();
+  
+    const addTopics = (...items) => {
+      items.filter(Boolean).forEach((item) => {
+        topics.push(item);
+        suggestions.add(item);
+      });
+    };
+  
+    const formatAnnual = (value, fallback) => {
+      if (typeof value === 'number') {
+        return `₹${value.toLocaleString('en-IN')} per year`;
+      }
+      if (typeof value === 'string') {
+        return value;
+      }
+      return fallback;
+    };
+  
+    const formatINR = (value, fallback) => {
+      if (typeof value === 'number') {
+        return `₹${value.toLocaleString('en-IN')}`;
+      }
+      if (typeof value === 'string') {
+        return value;
+      }
+      return fallback || '—';
+    };
+  
+    if (!message) {
+      return res.json({ reply: "Please provide a question about admissions, accounts, programs, placements, or campus facilities.", confidence: 60 });
+    }
+  
+    if (message.includes('admission') || message.includes('requirement')) {
+      const uni = universityData && universityData.university;
+      replyParts.push(`Vel Tech (Chennai) admissions:
+  • UG Engineering: 60% in 10+2 (PCM) with entrance scores (VTUEEE / JEE Main / TNEA as applicable)
+  • PG: 50%-60% in relevant UG; GATE for M.Tech; CAT/MAT/XAT for MBA programmes
+  • Documents: Marksheets, ID/passport photo; international: IELTS 6.0+ or TOEFL iBT 80+
+  • Application: ${uni ? uni.shortName : 'Vel Tech'} accepts online/offline forms (UG fee ₹950). Key deadlines: 31 Mar / 31 May / 30 Jun.`);
+      addTopics('Admission Requirements', 'Application Process', 'Application Deadlines', 'Scholarships');
+      suggestions.add('Accounts Department');
+      confidence = 94;
+    } else if (message.includes('upcoming placement') || message.includes('upcoming') && message.includes('placement')) {
+      const placements = universityData && universityData.placements;
+      const upcoming = placements && placements.upcomingPlacements;
+      if (upcoming) {
+        const companies = upcoming.scheduledCompanies || [];
+        const companyList = companies.map((comp) => 
+          `• ${comp.name} (${comp.date}): ${comp.roles.join(', ')} - Expected packages: ${comp.expectedPackages}`
+        ).join('\n');
+        const schedule = upcoming.recruitmentSchedule || {};
+        const support = upcoming.preparationSupport || [];
+        replyParts.push(`Upcoming Placements - ${upcoming.season || '2025-26 Placement Drive'}\n\nScheduled Companies:\n${companyList}\n\nRecruitment Schedule:\n• Mass Recruiters: ${schedule.massRecruiters || 'September - December 2025'}\n• Core Companies: ${schedule.coreCompanies || 'January - March 2026'}\n• Dream Companies: ${schedule.dreamCompanies || 'February - April 2026'}\n\nPreparation Support:\n${support.map((item) => `• ${item}`).join('\n')}\n\nFor more details, contact placements@veltech.edu.in`);
+      } else {
+        replyParts.push('Upcoming placement drives are scheduled throughout the academic year. Contact placements@veltech.edu.in for the latest schedule and company information.');
+      }
+      addTopics('Placements', 'Upcoming Placements', 'Career Services');
+      suggestions.add('Highest Package');
+      confidence = 88;
+    } else if (message.includes('highest package') || message.includes('highest salary') || message.includes('top package')) {
+      const placements = universityData && universityData.placements;
+      const highlights = placements && placements.highlights;
+      if (highlights) {
+        const highest = formatINR(highlights.highestPackageINR, '₹47,00,000');
+        const avg = formatINR(highlights.averagePackageINR, '₹5,20,000');
+        const highestDetails = highlights.highestPackageDetails;
+        const detailsText = highestDetails 
+          ? `\n\nHighest Package Details:\n• Amount: ${highestDetails.amount || highest}\n• Company: ${highestDetails.company || 'Top Recruiter'}\n• Location: ${highestDetails.location || '—'}\n• Role: ${highestDetails.role || '—'}\n• Student: ${highestDetails.student || '—'}`
+          : '';
+        const topStory = Array.isArray(placements.successStories) && placements.successStories.length
+          ? `\n\nSuccess Story: ${placements.successStories[0].student} (${placements.successStories[0].role} at ${placements.successStories[0].company}, package ${formatINR(placements.successStories[0].packageINR)}).`
+          : '';
+        replyParts.push(`Vel Tech's latest highest package is ${highest} (international offers included). The cohort average stands at ${avg} with ${highlights.totalOffers || 1325}+ total offers across ${placements.topRecruiters?.length || 13}+ recruiters.${detailsText}${topStory}`);
+      } else {
+        replyParts.push('Recent graduating batches at Vel Tech have recorded top packages above ₹47,00,000 with average offers around ₹5,20,000. Connect with placements@veltech.edu.in for the latest yearwise statistics.');
+      }
+      addTopics('Placements', 'Highest Package', 'Career Services');
+      suggestions.add('Upcoming Placements');
+      suggestions.add('Placement Statistics');
+      confidence = 88;
+    } else if (message.includes('fee structure') || message.includes('all programs fees') || (message.includes('fee') && (message.includes('all') || message.includes('program')))) {
+      const fees = universityData && universityData.fees;
+      const tuition = fees && fees.tuition;
+      if (tuition) {
+        let feeInfo = 'Vel Tech Fee Structure (All Programs)\n\n';
+        
+        // B.Tech
+        if (tuition.btech && tuition.btech.phases) {
+          const phaseI = tuition.btech.phases.phaseI;
+          if (phaseI) {
+            feeInfo += `B.Tech (VTUEEE Phase I):\n• Annual Tuition: ${formatINR(phaseI.annualTuitionBaseINR)}\n• Annual Programme Fee: ${formatINR(phaseI.annualProgrammeFeePayableINR)}\n• Scholarships: 75% (95%+), 50% (90-94.9%), 25% (80-89.9%), 10% (70-79.9%)\n\n`;
+          }
+        }
+        
+        // B.Sc
+        if (tuition.bsc) {
+          feeInfo += `B.Sc Computer Science:\n• Annual Programme Fee: ${formatINR(tuition.bsc.annualProgrammeFeePayableINR)}\n• Scholarships: 50% (90%+), 25% (80-89.9%), 10% (70-79.9%)\n\n`;
+        }
+        
+        // BBA
+        if (tuition.bba) {
+          feeInfo += `BBA:\n• Annual Programme Fee: ${formatINR(tuition.bba.annualProgrammeFeePayableINR)}\n• Scholarships: 50% (90%+), 25% (80-89.9%), 10% (70-79.9%)\n\n`;
+        }
+        
+        // B.Com
+        if (tuition.bcom) {
+          feeInfo += `B.Com:\n• Annual Programme Fee: ${formatINR(tuition.bcom.annualProgrammeFeePayableINR)}\n• Scholarships: 50% (90%+), 25% (80-89.9%), 10% (70-79.9%)\n\n`;
+        }
+        
+        // M.Tech
+        if (tuition.mtech) {
+          feeInfo += `M.Tech:\n• Annual Programme Fee: ${formatINR(tuition.mtech.annualProgrammeFeePayableINR)}\n• Scholarships: 75% (GATE 600+), 50% (GATE 500-600), 25% (GATE 400-499)\n\n`;
+        }
+        
+        // MBA
+        if (tuition.mba) {
+          feeInfo += `MBA:\n• Annual Programme Fee: ${formatINR(tuition.mba.annualProgrammeFeePayableINR)}\n• Scholarships: 75% (CAT 90+%), 50% (CAT 80-90%), 25% (CAT 70-79%)\n\n`;
+        }
+        
+        // MCA
+        if (tuition.mca) {
+          feeInfo += `MCA:\n• Annual Programme Fee: ${formatINR(tuition.mca.annualProgrammeFeePayableINR)}\n• Scholarships: 50% (UG 85%+), 25% (UG 75-84.9%), 10% (UG 65-74.9%)\n\n`;
+        }
+        
+        feeInfo += 'For detailed fee structure with semester-wise breakdown and all scholarship slabs, visit: /fees.html\n\nNote: All fees include Academic & Career Advancement Fee and Exam Fee. Caution deposit ₹5,000 (refundable) payable once during admission.';
+        replyParts.push(feeInfo);
+      } else {
+        replyParts.push('Vel Tech offers various programs with competitive fee structures. B.Tech starts at ₹3,10,000 per year (Phase I) with scholarships available. For detailed fee information for all programs (B.Tech, B.Sc, BBA, B.Com, M.Tech, MBA, MCA), visit /fees.html or contact admissions@veltech.edu.in');
+      }
+      addTopics('Fee Structure', 'Tuition & Fees', 'All Programs Fees', 'Scholarships');
+      suggestions.add('Scholarships');
+      suggestions.add('Admission Requirements');
+      confidence = 92;
+    } else if (message.includes('scholar') || message.includes('financial')) {
+      const sch = universityData && universityData.scholarships;
+      if (sch) {
+        const meritSch = Array.isArray(sch.merit) ? sch.merit.join('; ') : '';
+        const needSch = Array.isArray(sch.need) ? sch.need.join('; ') : '';
+        const allSch = [meritSch, needSch].filter(s => s).join('. ') || 'Merit and need-based scholarships available.';
+        replyParts.push(`Scholarships: ${allSch}`);
+      } else {
+        replyParts.push('We offer merit and entrance-based scholarships; contact admissions for details.');
+      }
+      addTopics('Scholarships', 'Tuition & Fees', 'Admission Requirements');
+      confidence = 88;
+    } else if (message.includes('campus') || message.includes('life') || message.includes('facility')) {
+      const facilities = universityData && universityData.campus && universityData.campus.facilities;
+      replyParts.push(`Campus life at Vel Tech includes:
+  ${facilities ? facilities.map(item => `• ${item}`).join('\n') : '• Modern classrooms and labs\n• Central library and innovation centres\n• Sports complex, hostels, cafeteria, medical & counselling support'}
+  • Regular clubs, cultural festivals, hackathons and industry talks
+  • Transport services covering Chennai & nearby regions`);
+      addTopics('Campus Life', 'Campus Facilities', 'Student Life');
+      suggestions.add('Placements');
+      confidence = 85;
+    } else if (message.includes('placement') || message.includes('job') || message.includes('career')) {
+      const placements = universityData && universityData.placements;
+      if (placements && placements.highlights) {
+        const highlights = placements.highlights;
+        const highlightsTable = `Placement Highlights\nMetric | Value\n------ | -----\nPlacement Rate | ${highlights.placementRatePercent || 90}%\nHighest Package | ${formatINR(highlights.highestPackageINR, '₹18,00,000')}\nAverage Package | ${formatINR(highlights.averagePackageINR, '₹5,20,000')}\nMedian Package | ${formatINR(highlights.medianPackageINR, '₹4,50,000')}\nTotal Offers | ${highlights.totalOffers || '1200+'}\nInternational Offers | ${highlights.internationalOffers || 0}`;
+        const branchTable = Array.isArray(placements.branches) && placements.branches.length
+          ? `Branch Outcomes\nBranch | Placement Rate | Avg Package | Top Roles\n------ | -------------- | ----------- | ---------\n${placements.branches.map((branch) => {
+    const rate = typeof branch.placementRatePercent === 'number' ? `${branch.placementRatePercent}%` : branch.placementRatePercent || '—';
+    const avg = formatINR(branch.averagePackageINR, '₹5,00,000');
+    const roles = Array.isArray(branch.topRoles) ? branch.topRoles.join(', ') : 'Key industry roles';
+    return `${branch.name} | ${rate} | ${avg} | ${roles}`;
+  }).join('\n')}`
+          : '';
+        const successTable = Array.isArray(placements.successStories) && placements.successStories.length
+          ? `Success Stories\nStudent | Company / Role | Package\n------- | --------------- | -------\n${placements.successStories.map((story) => {
+    const companyRole = `${story.company || 'Top recruiter'} (${story.role || 'Role'})`;
+    return `${story.student} | ${companyRole} | ${formatINR(story.packageINR, '—')}`;
+  }).join('\n')}`
+          : '';
+        const recruiterList = (placements.topRecruiters || []).join(', ') || 'TCS, Wipro, Infosys, Accenture, Zoho, TVS';
+        const trainingList = Array.isArray(placements.training)
+          ? placements.training.map((item) => `• ${item}`).join('\n')
+          : '• CDPC provides aptitude, coding and interview preparation with company-focused bootcamps';
+  
+        replyParts.push(`Vel Tech placements (${placements.year || 'latest batch'})\n\n${highlightsTable}\n\n${branchTable ? `${branchTable}\n\n` : ''}${successTable ? `${successTable}\n\n` : ''}Top Recruiters\n${recruiterList}\n\nTraining & Support\n${trainingList}\n\nPlacement Helpdesk: ${placements.contact?.email || 'placements@veltech.edu.in'} | ${placements.contact?.phone || '+91-44-2684 1605'}`);
+      } else {
+        replyParts.push('Vel Tech Career Development & Placement Cell (CDPC) supports students with aptitude prep, mock interviews, and company-specific training. Recent recruiters include TCS, Wipro, Infosys, Accenture, Cognizant, Zoho, Dell, TVS, L&T, and core engineering firms. Contact placements@veltech.edu.in for detailed placement stats or upcoming drive schedules.');
+      }
+      addTopics('Placements', 'Career Services', 'Internships');
+      suggestions.add('Academic Programs');
+      confidence = 87;
+    } else if (message.includes('highest package') || message.includes('highest salary') || message.includes('top package')) {
+      const placements = universityData && universityData.placements;
+      const highlights = placements && placements.highlights;
+      if (highlights) {
+        const highest = formatINR(highlights.highestPackageINR, '₹18,00,000');
+        const avg = formatINR(highlights.averagePackageINR, '₹5,20,000');
+        const topStory = Array.isArray(placements.successStories) && placements.successStories.length
+          ? `${placements.successStories[0].student} (${placements.successStories[0].role} at ${placements.successStories[0].company}, package ${formatINR(placements.successStories[0].packageINR)}).`
+          : '';
+        replyParts.push(`Vel Tech's latest highest package is ${highest} (international offers included). The cohort average stands at ${avg} with ${highlights.totalOffers || 1200}+ total offers across ${placements.topRecruiters?.length || 50}+ recruiters. ${topStory}`);
+      } else {
+        replyParts.push('Recent graduating batches at Vel Tech have recorded top packages above ₹18,00,000 with average offers around ₹5,00,000. Connect with placements@veltech.edu.in for the latest yearwise statistics.');
+      }
+      addTopics('Placements', 'Highest Package', 'Career Services');
+      suggestions.add('Fee Structure');
+      suggestions.add('Lateral Entry');
+      confidence = 88;
+    } else if (message.includes('program') || message.includes('course') || message.includes('degree')) {
+      const programs = universityData && universityData.programs;
+      if (programs) {
+        const ugProgs = programs.ug ? programs.ug.slice(0, 5).join(', ') : '';
+        const pgProgs = programs.pg ? programs.pg.join(', ') : '';
+        replyParts.push(`Vel Tech offers various programs. UG: ${ugProgs || 'B.Tech, B.Sc, BBA, B.Com'}. PG: ${pgProgs || 'M.Tech, MBA, MCA'}.`);
+      } else {
+        replyParts.push('Vel Tech offers B.Tech, M.Tech, MBA, MCA, B.Sc, BBA, and B.Com programs across various specializations.');
+      }
+      addTopics('Academic Programs', 'Courses', 'Admissions');
+      suggestions.add('Placements');
+      confidence = 88;
+    } else if (message.includes('housing') || message.includes('hostel') || message.includes('accommodation')) {
+      const fees = universityData && universityData.fees;
+      if (fees && fees.hostel) {
+        const hostel = fees.hostel;
+        const summary = typeof hostel === 'string'
+          ? hostel
+          : hostel.summary || hostel.boys || hostel.girls || 'INR 95,000 – 1,25,000 per year';
+        const buildCategoryLines = (label, list) => {
+          if (!Array.isArray(list) || !list.length) return '';
+          const items = list.map((item) => {
+            const fee = item.annualHostelFeeINR ? `₹${item.annualHostelFeeINR.toLocaleString('en-IN')}` : '—';
+            const mess = item.messPlanINR ? ` + Mess ₹${item.messPlanINR.toLocaleString('en-IN')}` : '';
+            const deposit = item.securityDepositINR ? ` (Deposit ₹${item.securityDepositINR.toLocaleString('en-IN')})` : '';
+            return `• ${item.name}: ${fee}${mess}${deposit}${item.occupancy ? ` · ${item.occupancy}` : ''}`;
+          }).join('\n');
+          return `${label}\n${items}`;
+        };
+        const buildListLines = (label, list) => {
+          if (!Array.isArray(list) || !list.length) return '';
+          const items = list.map((item) => {
+            const host = item.annualHostelFeeINR ? `₹${item.annualHostelFeeINR.toLocaleString('en-IN')}` : '—';
+            const mess = item.messPlanINR ? ` / Mess ₹${item.messPlanINR.toLocaleString('en-IN')}` : '';
+            const deposit = item.securityDepositINR ? ` / Deposit ₹${item.securityDepositINR.toLocaleString('en-IN')}` : '';
+            return `• ${item.category}: ${host}${mess}${deposit}`;
+          }).join('\n');
+          return `${label}\n${items}`;
+        };
+        const boysDetail = buildCategoryLines('Boys Hostel Plans:', hostel.boysCategories);
+        const girlsDetail = buildCategoryLines('Girls Hostel Plans:', hostel.girlsCategories);
+        const hostelList = buildListLines('Hostel Fee List:', hostel.hostelFeeList);
+        const messInfo = fees.mess || 'INR 45,000 - 60,000 per year';
+  
+        replyParts.push(`Hostel Fees & Accommodation\n\n${summary}\n\n${hostelList ? `${hostelList}\n\n` : ''}${boysDetail ? `${boysDetail}\n\n` : ''}${girlsDetail ? `${girlsDetail}\n\n` : ''}Mess plan: ${messInfo}.\n\nFor detailed hostel features and amenities, ask about "hostel features".`.trim());
+      } else {
+        replyParts.push('Hostel accommodation is available. Boys and Girls hostels: INR 85,000 - 1,10,000 per year. Mess: INR 45,000 - 60,000 per year. Contact admissions for details.');
+      }
+      addTopics('Campus Housing', 'Hostel', 'Student Life');
+      suggestions.add('Fee Structure');
+      confidence = 86;
+    } else if (message.includes('transport') || message.includes('bus') || message.includes('shuttle')) {
+      const transport = universityData && universityData.fees && universityData.fees.transport;
+      if (transport) {
+        const routesTable = Array.isArray(transport.routes) && transport.routes.length
+          ? `Route | Annual Fee | Avg Travel Time\n----- | ---------- | ----------------\n${transport.routes.map((route) => {
+    const fee = route.annualFeeINR ? `₹${route.annualFeeINR.toLocaleString('en-IN')}` : '—';
+    return `${route.route} | ${fee} | ${route.travelTime || '—'}`;
+  }).join('\n')}`
+          : '';
+        const facilities = Array.isArray(transport.facilities)
+          ? `Bus facilities:\n${transport.facilities.map((item) => `• ${item}`).join('\n')}`
+          : '';
+        replyParts.push(`Vel Tech transport: ${transport.summary || 'Shuttle services across Chennai and nearby districts.'}\n\nAnnual Passes\n• City (core Chennai): ₹${(transport.cityPassINR || 36000).toLocaleString('en-IN')}\n• Suburban corridor: ₹${(transport.suburbanPassINR || 42000).toLocaleString('en-IN')}\n• Outer ring / far routes: ₹${(transport.outerRingPassINR || 48000).toLocaleString('en-IN')}\n\n${routesTable ? `${routesTable}\n\n` : ''}${facilities}`.trim());
+      } else {
+        replyParts.push('Vel Tech operates a fleet of buses covering Chennai and surrounding districts. Annual passes typically range between ₹36,000 and ₹48,000 depending on distance. Contact the transport office for current schedules.');
+      }
+      addTopics('Transport Services', 'Campus Facilities', 'Student Life');
+      suggestions.add('Hostel');
+      confidence = 84;
+    } else if (message.includes('hostel feature') || message.includes('hostel amenit') || message.includes('accommodation feature')) {
+      const fees = universityData && universityData.fees;
+      const hostel = fees && fees.hostel;
+      if (hostel && typeof hostel === 'object') {
+        const facilitiesTitle = 'Hostel Features & Amenities';
+        const commonFacilities = Array.isArray(hostel.commonFacilities)
+          ? `Common Facilities\n${hostel.commonFacilities.map((f) => `• ${f}`).join('\n')}`
+          : '';
+        const boysAmenities = Array.isArray(hostel.boysCategories)
+          ? `Boys Hostel Features\n${hostel.boysCategories.map((cat) => {
+    const amenList = Array.isArray(cat.amenities) ? cat.amenities.map((a) => `  - ${a}`).join('\n') : '';
+    return `${cat.name}:\n${amenList}`;
+  }).join('\n\n')}`
+          : '';
+        const girlsAmenities = Array.isArray(hostel.girlsCategories)
+          ? `Girls Hostel Features\n${hostel.girlsCategories.map((cat) => {
+    const amenList = Array.isArray(cat.amenities) ? cat.amenities.map((a) => `  - ${a}`).join('\n') : '';
+    return `${cat.name}:\n${amenList}`;
+  }).join('\n\n')}`
+          : '';
+        replyParts.push(`${facilitiesTitle}\n\n${commonFacilities}\n\n${boysAmenities ? `${boysAmenities}\n\n` : ''}${girlsAmenities ? `${girlsAmenities}\n\n` : ''}`.trim());
+      } else {
+        replyParts.push('Hostel features include 24x7 security, study halls, gym, recreation zones, Wi-Fi, RO water, power backup, and medical support. Contact hostels@veltech.edu.in for detailed amenities list.');
+      }
+      addTopics('Hostel Features', 'Campus Housing', 'Student Life');
+      suggestions.add('Hostel Fees');
+      confidence = 85;
+    } else if (message.includes('deadline') || message.includes('date') || message.includes('when')) {
+      const admissions = universityData && universityData.admissions;
+      if (admissions && admissions.ug && admissions.ug.application && admissions.ug.application.deadlines) {
+        const deadlines = admissions.ug.application.deadlines;
+        replyParts.push(`Application deadlines: Early - ${deadlines.early || '31 March'}, Regular - ${deadlines.regular || '31 May'}, Late - ${deadlines.late || '30 June'}.`);
+      } else {
+        replyParts.push('Application deadlines vary by program. Early applications: 31 March, Regular: 31 May, Late: 30 June (subject to availability).');
+      }
+      addTopics('Application Deadlines', 'Application Process', 'Admission Requirements');
+      confidence = 90;
+    } else if (message.includes('lateral') || message.includes('lateral entry')) {
+      replyParts.push('For information about lateral entry admissions, please contact the admissions department at admissions@veltech.edu.in or call +91-44-2684 1605 (Ext. 101).');
+      addTopics('Admissions', 'Academic Programs');
+      suggestions.add('Admission Requirements');
+      confidence = 85;
+    } else if (message.includes('exam') || message.includes('result') || message.includes('attendance')) {
+      const exams = universityData && universityData.examinations;
+      if (exams) {
+        if (message.includes('schedule') || message.includes('when') || message.includes('date')) {
+          const schedule = exams.schedule;
+          replyParts.push(`Exam Schedule\nMid-Term: ${schedule.midTerm}\nEnd Semester: ${schedule.endSemester}\nSupplementary: ${schedule.supplementary}\nRevaluation Window: ${schedule.revaluationWindow}`);
+        } else if (message.includes('result')) {
+          const results = exams.results;
+          replyParts.push(`Exam Results\nDeclaration: ${results.declarationTimeline}\nPortal: ${results.portal}\nGrade System: ${results.gradeSystem}\nCGPA: ${results.cgpaCalculation}`);
+        } else if (message.includes('attendance')) {
+          const attRules = exams.attendanceRules;
+          replyParts.push(`Attendance Rules\nMinimum Required: ${attRules.minimumRequired}\nMedical Exemption: ${attRules.medicalExemption}\nDebarment Policy: ${attRules.debarment}\nTracking: ${attRules.tracking}`);
+        } else {
+          const contact = exams.contact;
+          replyParts.push(`Examinations Department\nEmail: ${contact.email}\nPhone: ${contact.phone}\nOffice Hours: ${contact.officeHours}`);
+        }
+      } else {
+        replyParts.push('Exam schedules, results, and attendance information available. Contact exams@veltech.edu.in for details.');
+      }
+      addTopics('Examinations', 'Results', 'Attendance');
+      suggestions.add('Academics');
+      confidence = 88;
+    } else if (message.includes('library') || message.includes('book') || message.includes('journal')) {
+      const library = universityData && universityData.library;
+      if (library) {
+        const collections = library.collections;
+        const facilities = Array.isArray(library.facilities) ? library.facilities.map((f) => `• ${f}`).join('\n') : '';
+        const timings = library.timings;
+        const contact = library.contact;
+        replyParts.push(`${library.name}\n\nCollections\nBooks: ${collections.books}\nJournals: ${collections.journals}\nE-Resources: ${collections.eResources}\nTheses: ${collections.theses}\n\nFacilities\n${facilities}\n\nTimings\nWeekdays: ${timings.weekdays}\nWeekends: ${timings.weekends}\nHolidays: ${timings.holidays}\n\nContact\nLibrarian: ${contact.librarian}\nEmail: ${contact.email}\nPhone: ${contact.phone}\nOffice Hours: ${contact.officeHours}`);
+      } else {
+        replyParts.push('Central Library offers 1,50,000+ books, e-journals, and digital resources. Contact library@veltech.edu.in for details.');
+      }
+      addTopics('Library', 'Resources', 'Academics');
+      suggestions.add('Examinations');
+      confidence = 87;
+    } else if (message.includes('academic') || message.includes('department') || message.includes('faculty')) {
+      const academics = universityData && universityData.academics;
+      if (academics) {
+        const deptTable = Array.isArray(academics.departments) && academics.departments.length
+          ? `Departments\nDepartment | Head | Email | Phone\n---------- | ---- | ----- | -----\n${academics.departments.map((dept) => `${dept.name} | ${dept.head} | ${dept.email} | ${dept.phone}`).join('\n')}`
+          : '';
+        const calendar = academics.academicCalendar;
+        const attRules = academics.attendanceRules;
+        replyParts.push(`Academics Department\n\n${deptTable}\n\nAcademic Calendar\nSemester Start: ${calendar.semesterStart}\nMid-Term Exams: ${calendar.midTermExams}\nEnd Semester: ${calendar.endSemesterExams}\nResults: ${calendar.resultsDeclaration}\n\nAttendance Rules\nMinimum: ${attRules.minimumAttendance}\nMedical Leave: ${attRules.medicalLeave}\nConsequences: ${attRules.consequences}\n\nOffice Hours: ${academics.officeHours}`);
+      } else {
+        replyParts.push('Academics department handles all academic matters. Contact academics@veltech.edu.in for department-specific queries.');
+      }
+      addTopics('Academics', 'Departments', 'Faculty');
+      suggestions.add('Library');
+      confidence = 89;
+    } else if (message.includes('account') || message.includes('payment') || message.includes('refund')) {
+      const accounts = universityData && universityData.accounts;
+      if (accounts) {
+        const deptName = accounts.department || 'Accounts & Finance Department';
+        const head = accounts.head ? `Head: ${accounts.head}\n` : '';
+        const services = Array.isArray(accounts.services) ? accounts.services.map(s => `• ${s}`).join('\n') : '';
+        const payment = accounts.feePayment;
+        const refund = accounts.refunds;
+        const scholarship = accounts.scholarshipDisbursement;
+        const studentServices = accounts.studentServices;
+        const contact = accounts.contact;
+        
+        let accountInfo = `${deptName}\n${head}`;
+        if (services) accountInfo += `\nServices:\n${services}\n`;
+        
+        if (payment) {
+          const paymentModes = Array.isArray(payment.modes) ? payment.modes.join(', ') : '';
+          const paymentMethods = payment.paymentMethods;
+          accountInfo += `\nFee Payment:\n• Modes: ${paymentModes}\n• Portal: ${payment.onlinePortal || 'https://payments.veltech.edu.in'}\n• Deadline: ${payment.deadlines || 'Within 15 days of fee notification'}\n`;
+          if (paymentMethods && paymentMethods.online) {
+            accountInfo += `• Online Gateways: ${Array.isArray(paymentMethods.online.gateways) ? paymentMethods.online.gateways.join(', ') : ''}\n`;
+          }
+          if (payment.installmentOptions) accountInfo += `• ${payment.installmentOptions}\n`;
+          if (payment.lateFeePolicy) accountInfo += `• Late Fee: ${payment.lateFeePolicy}\n`;
+        }
+        
+        if (refund) {
+          accountInfo += `\nRefunds:\n• Policy: ${refund.policy || 'As per UGC guidelines'}\n• Processing Time: ${refund.processingTime || '7-10 working days'}\n`;
+          if (refund.refundMethods) {
+            accountInfo += `• Methods: ${Array.isArray(refund.refundMethods) ? refund.refundMethods.join(', ') : ''}\n`;
+          }
+        }
+        
+        if (scholarship) {
+          if (typeof scholarship === 'object' && scholarship.frequency) {
+            accountInfo += `\nScholarship Disbursement:\n• Frequency: ${scholarship.frequency}\n• Methods: ${Array.isArray(scholarship.methods) ? scholarship.methods.join(', ') : ''}\n`;
+          } else {
+            accountInfo += `\nScholarship Disbursement: ${scholarship}\n`;
+          }
+        }
+        
+        if (studentServices) {
+          accountInfo += `\nStudent Services:\n`;
+          if (studentServices.feeCertificates) accountInfo += `• ${studentServices.feeCertificates}\n`;
+          if (studentServices.receipts) accountInfo += `• ${studentServices.receipts}\n`;
+          if (studentServices.dues) accountInfo += `• ${studentServices.dues}\n`;
+          if (studentServices.paymentHistory) accountInfo += `• ${studentServices.paymentHistory}\n`;
+        }
+        
+        if (contact) {
+          accountInfo += `\nContact:\n• Email: ${contact.email}\n• Phone: ${contact.phone}\n• Office Hours: ${contact.officeHours}\n`;
+          if (contact.location) accountInfo += `• Location: ${contact.location}\n`;
+          if (contact.counterHours) accountInfo += `• Counter Hours: ${contact.counterHours}\n`;
+        }
+        
+        replyParts.push(accountInfo);
+      } else {
+        replyParts.push('Accounts & Finance Department handles fee payments, refunds, and scholarship disbursements. Contact accounts@veltech.edu.in for queries.');
+      }
+      addTopics('Accounts', 'Fee Payment', 'Refunds', 'Scholarship Disbursement');
+      suggestions.add('Contact Information');
+      confidence = 90;
+    } else if (message.includes('contact') || message.includes('office hour') || message.includes('phone') || message.includes('email') || message.includes('address')) {
+      const contacts = universityData && universityData.contacts;
+      const depts = universityData && universityData.departments;
+      
+      if (contacts) {
+        const general = contacts.general;
+        const admissions = contacts.admissions;
+        const international = contacts.international;
+        const emergency = contacts.emergency;
+        const social = contacts.socialMedia;
+        
+        let contactInfo = 'Vel Tech University - Contact Information\n\n';
+        
+        if (general) {
+          contactInfo += `General Contact:\n`;
+          if (typeof general === 'object') {
+            if (general.phone) contactInfo += `• Phone: ${general.phone}\n`;
+            if (general.email) contactInfo += `• Email: ${general.email}\n`;
+            if (general.address) contactInfo += `• Address: ${general.address}\n`;
+          } else {
+            contactInfo += `• Phone: ${general}\n`;
+          }
+        }
+        
+        if (admissions) {
+          contactInfo += `\nAdmissions:\n`;
+          if (typeof admissions === 'object') {
+            if (admissions.email) contactInfo += `• Email: ${admissions.email}\n`;
+            if (admissions.phone) contactInfo += `• Phone: ${admissions.phone}\n`;
+            if (admissions.tollFree) contactInfo += `• Toll-Free: ${admissions.tollFree}\n`;
+            if (admissions.officeHours) contactInfo += `• Office Hours: ${admissions.officeHours}\n`;
+          } else {
+            contactInfo += `• Email: ${admissions}\n`;
+          }
+        }
+        
+        if (international) {
+          contactInfo += `\nInternational Office:\n`;
+          if (typeof international === 'object') {
+            if (international.email) contactInfo += `• Email: ${international.email}\n`;
+            if (international.phone) contactInfo += `• Phone: ${international.phone}\n`;
+            if (international.officeHours) contactInfo += `• Office Hours: ${international.officeHours}\n`;
+          } else {
+            contactInfo += `• Email: ${international}\n`;
+          }
+        }
+        
+        if (emergency) {
+          contactInfo += `\nEmergency:\n`;
+          if (typeof emergency === 'object') {
+            if (emergency.phone) contactInfo += `• Phone: ${emergency.phone}\n`;
+            if (emergency.available) contactInfo += `• Available: ${emergency.available}\n`;
+          }
+        }
+        
+        if (social) {
+          contactInfo += `\nSocial Media & Website:\n`;
+          if (social.website) contactInfo += `• Website: ${social.website}\n`;
+          if (social.facebook) contactInfo += `• Facebook: ${social.facebook}\n`;
+          if (social.twitter) contactInfo += `• Twitter: ${social.twitter}\n`;
+          if (social.linkedin) contactInfo += `• LinkedIn: ${social.linkedin}\n`;
+          if (social.instagram) contactInfo += `• Instagram: ${social.instagram}\n`;
+        }
+      }
+      
+      if (depts) {
+        const deptList = Object.entries(depts).map(([key, value]) => {
+          return `${key.charAt(0).toUpperCase() + key.slice(1)}: ${value.email} | ${value.phone} | ${value.officeHours}`;
+        }).join('\n');
+        replyParts.push(`${contactInfo ? contactInfo + '\n\n' : ''}Department Contacts & Office Hours\n\n${deptList}`);
+      } else if (contactInfo) {
+        replyParts.push(contactInfo);
+      } else {
+        replyParts.push('General contact: +91-44-2684 1605. Admissions: admissions@veltech.edu.in. For specific departments, ask about that department.');
+      }
+      addTopics('Contact', 'Office Hours', 'Departments', 'Social Media');
+      suggestions.add('Accounts Department');
+      confidence = 90;
+    } else {
+      replyParts.push("I can help with admissions, accounts, scholarships, programs, campus facilities, placements, upcoming placements, highest package, housing, exams, library, academics, and contact information. Try asking about 'admission requirements', 'accounts department', 'upcoming placements', 'highest package', 'exam schedule', 'library resources', or 'contact details'.");
+      addTopics('Admission Requirements', 'Accounts Department', 'Placements', 'Campus Life');
+      confidence = 70;
+    }
+  
+    const reply = replyParts.join('\n');
+    const uniqueTopics = [...new Set(topics)];
+    const suggestionList = suggestions.size ? [...suggestions] : uniqueTopics.length ? uniqueTopics : ['Admissions', 'Accounts Department', 'Placements'];
+    return res.json({ reply, confidence, topics: uniqueTopics, suggestions: suggestionList });
+  });
+  
+  // fallback route to serve index
+  app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+  });
+  
+  // Start server (listen with automatic retry on EADDRINUSE)
+  let server = null;
+  const MAX_PORT_RETRIES = 5;
+  let _attempts = 0;
+  
+  function startServer(port) {
+    _attempts++;
+    server = app.listen(port, () => {
+      console.log('');
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('  🚀 EduBot Server is RUNNING!');
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('');
+      console.log(`  📍 Server URL: http://localhost:${port}`);
+      console.log(`  📍 Alternative: http://127.0.0.1:${port}`);
+      console.log('');
+      console.log('  ⚠️  IMPORTANT:');
+      console.log('     • Keep this window OPEN while using the app');
+      console.log(`     • Open browser and go to: http://localhost:${port}`);
+      console.log('     • Do NOT close this window!');
+      console.log('');
+      console.log('  🛑 To stop server: Press Ctrl+C');
+      console.log('');
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('');
+    });
+  
+    server.on('error', (err) => {
+      console.error('');
+      console.error('═══════════════════════════════════════════════════════════');
+      console.error('  ❌ SERVER ERROR!');
+      console.error('═══════════════════════════════════════════════════════════');
+      console.error('');
+      if (err.code === 'EADDRINUSE') {
+        console.error(`  Port ${port} is already in use!`);
+        if (_attempts <= MAX_PORT_RETRIES) {
+          const nextPort = Number(port) + 1;
+          console.error(`  ⚠️  Attempting to start on port ${nextPort} (attempt ${_attempts}/${MAX_PORT_RETRIES})`);
+          console.error('');
+          // small delay before retrying
+          setTimeout(() => startServer(nextPort), 300);
+          return;
+        }
+        console.error('');
+        console.error('  💡 Solutions:');
+        console.error('     1. Close the other application using this port');
+        console.error('     2. Or set a different PORT environment variable before starting the app');
+        console.error('        e.g. (PowerShell): $env:PORT=3001; node server.js');
+      } else {
+        console.error('  Error:', err.message);
+        console.error('  Error code:', err.code);
+      }
+      console.error('');
+      console.error('═══════════════════════════════════════════════════════════');
+      console.error('');
+      process.exit(1);
+    });
+  }
+  
+  // Start with the configured PORT (number)
+  startServer(Number(PORT) || 3000);
+  
+  // Handle uncaught exceptions
+  process.on('uncaughtException', (err) => {
+    console.error('');
+    console.error('═══════════════════════════════════════════════════════════');
+    console.error('  ❌ UNCAUGHT EXCEPTION!');
+    console.error('═══════════════════════════════════════════════════════════');
+    console.error('');
+    console.error('  Error:', err.message);
+    console.error('  Stack:', err.stack);
+    console.error('');
+    console.error('═══════════════════════════════════════════════════════════');
+    console.error('');
+    process.exit(1);
+  });
+  
+  // Handle unhandled promise rejections
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('');
+    console.error('═══════════════════════════════════════════════════════════');
+    console.error('  ❌ UNHANDLED REJECTION!');
+    console.error('═══════════════════════════════════════════════════════════');
+    console.error('');
+    console.error('  Reason:', reason);
+    console.error('');
+    console.error('═══════════════════════════════════════════════════════════');
+    console.error('');
+  });
+  
+  // Keep process alive
+  process.on('SIGINT', () => {
+    console.log('');
+    console.log('═══════════════════════════════════════════════════════════');
+    console.log('  🛑 Server is shutting down...');
+    console.log('═══════════════════════════════════════════════════════════');
+    console.log('');
+    server.close(() => {
+      console.log('  ✅ Server closed successfully');
+      console.log('');
+      process.exit(0);
+    });
+  });
+  
+  // Prevent process from exiting
+  process.stdin.resume();
