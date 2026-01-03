@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" >
+  <title>EduBot · Vel Tech Chennai</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles-fixed.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-content">
+        <div class="header-top-section">
+          <div class="logo-section">
+            <img src="vel tech logo.png" alt="Vel Tech University Logo" class="college-logo" id="collegeLogo" onerror="this.style.display='none'; this.src='college-logo.svg'; if(document.getElementById('logoFallback')) document.getElementById('logoFallback').style.display='inline-block';">
+            <i class="fas fa-graduation-cap" id="logoFallback" style="display:none;"></i>
+            <div class="logo-text">
+              <h1>Vel Tech</h1>
+              <p class="university-name">Rangarajan Dr. Sagunthala R&D Institute of Science and Technology<br>(Deemed to be University Estd. u/s 3 of UGC Act, 1956)</p>
+              <div class="contact-info">
+                <a href="tel:+914426841605" class="contact-item">
+                  <i class="fas fa-phone"></i>
+                  <span>+91-44-2684 1605</span>
+                </a>
+                <a href="https://wa.me/914426841605" target="_blank" class="contact-item whatsapp-item">
+                  <i class="fab fa-whatsapp"></i>
+                  <span>+91-44-2684 1605</span>
+                </a>
+              </div>
+            </div>
+          </div>
+          <div class="accreditation-badges">
+            <div class="badge naac-badge">
+              <div class="badge-icon">
+                <span class="naac-label">NAAC</span>
+                <span class="naac-grade">A++</span>
+              </div>
+              <span class="badge-text">NAAC A++</span>
+            </div>
+            <div class="badge category-badge">
+              <i class="fas fa-certificate"></i>
+              <span class="badge-text">Category-1 Deemed to be University</span>
+            </div>
+          </div>
+        </div>
+        <div class="header-bottom-section">
+          <p class="subtitle">EduBot · Your AI Assistant for Vel Tech University (Chennai)</p>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Chat Area -->
+    <main class="chat-container">
+      <div class="chat-header">
+        <div class="bot-info">
+          <div class="bot-avatar">
+            <i class="fas fa-robot"></i>
+          </div>
+          <div class="bot-details">
+            <h3>EduBot Assistant</h3>
+            <span class="status online">Online</span>
+          </div>
+        </div>
+        <button class="btn-clear" onclick="clearChat()" title="Clear Chat">
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
+
+      <div class="chat-messages" id="chatMessages">
+        <!-- Welcome message with quick options -->
+        <div class="message bot-message">
+          <div class="message-avatar">
+            <i class="fas fa-robot"></i>
+          </div>
+          <div class="message-content">
+            <div class="message-text">
+              Hello! I'm EduBot, your AI assistant for Vel Tech University. You can type your questions or use the microphone button to ask via voice. How can I help you today? You can ask me about:
+            </div>
+            <div class="quick-options">
+              <button class="quick-btn" onclick="sendQuickMessage('What are the admission requirements?')">Admission Requirements</button>
+              <button class="quick-btn" onclick="sendQuickMessage('What campus facilities are available?')">Campus Facilities</button>
+              <button class="quick-btn" onclick="sendQuickMessage('How do I apply?')">Application Process</button>
+              <button class="quick-btn" onclick="sendQuickMessage('Tell me about scholarships')">Scholarships</button>
+              <button class="quick-btn" onclick="sendQuickMessage('What is the fee structure?')">Fee Structure</button>
+              <button class="quick-btn placement-btn" onclick="sendQuickMessage('Tell me about placements')">Placements</button>
+              <button class="quick-btn" onclick="sendQuickMessage('What are the contact details?')">Contact Info</button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Typing Indicator -->
+        <div class="typing-indicator" id="typingIndicator">
+          <div class="message-avatar">
+            <i class="fas fa-robot"></i>
+          </div>
+          <div class="message-content">
+            <div class="typing-dots">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Input -->
+      <div class="chat-input-container">
+        <div class="chat-input">
+          <button class="voice-btn" id="voiceBtn" onclick="toggleVoiceInput()" title="Voice Input">
+            <i class="fas fa-microphone"></i>
+          </button>
+          <input type="text" id="messageInput" placeholder="Type your question naturally..." onkeypress="handleKeyPress(event)" />
+          <button class="send-btn" onclick="sendMessage()" title="Send Message">
+            <i class="fas fa-paper-plane"></i>
+          </button>
+        </div>
+        <div id="voiceStatus" class="voice-status" style="display: none;">
+          <i class="fas fa-circle" style="color: #ef4444;"></i>
+          <span>Listening...</span>
+        </div>
+      </div>
+    </main>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <h3>Popular Topics</h3>
+        <ul class="topic-list">
+          <li onclick="sendQuickMessage('What are the admission requirements?')">
+            <i class="fas fa-file-alt"></i>
+            Admission Requirements
+          </li>
+          <li onclick="sendQuickMessage('What are the application deadlines?')">
+            <i class="fas fa-calendar-alt"></i>
+            Application Deadlines
+          </li>
+          <li onclick="sendQuickMessage('Tell me about campus housing')">
+            <i class="fas fa-home"></i>
+            Campus Housing
+          </li>
+          <li onclick="sendQuickMessage('Tell me about hostel features')">
+            <i class="fas fa-star"></i>
+            Hostel Features
+          </li>
+          <li onclick="sendQuickMessage('What academic programs are available?')">
+            <i class="fas fa-book"></i>
+            Academic Programs
+          </li>
+          <li onclick="sendQuickMessage('Tell me about student life')">
+            <i class="fas fa-users"></i>
+            Student Life
+          </li>
+          <li onclick="sendQuickMessage('Tell me about placements')">
+            <i class="fas fa-briefcase"></i>
+            Placements
+          </li>
+          <li onclick="sendQuickMessage('What is the exam schedule?')">
+            <i class="fas fa-calendar-check"></i>
+            Exam Schedule
+          </li>
+          <li onclick="sendQuickMessage('Tell me about library resources')">
+            <i class="fas fa-book-open"></i>
+            Library
+          </li>
+          <li onclick="sendQuickMessage('Tell me about scholarships')">
+            <i class="fas fa-gift"></i>
+            Scholarships
+          </li>
+          <li onclick="window.location.href='fees.html'">
+            <i class="fas fa-rupee-sign"></i>
+            Fee Structure
+          </li>
+          <li onclick="sendQuickMessage('What are the contact details?')">
+            <i class="fas fa-address-book"></i>
+            Contact Information
+          </li>
+        </ul>
+      </div>
+
+      <div class="sidebar-section">
+        <h3>Quick Help</h3>
+        <div class="help-item">
+          <i class="fas fa-info-circle"></i>
+          <span>Type your question or use voice input (microphone button)</span>
+        </div>
+        <div class="help-item">
+          <i class="fas fa-lightbulb"></i>
+          <span>Click on popular topics for quick answers</span>
+        </div>
+        <div class="help-item">
+          <i class="fas fa-microphone"></i>
+          <span>Click microphone button to ask questions using voice</span>
+        </div>
+        <div class="help-item">
+          <i class="fas fa-question-circle"></i>
+          <span>EduBot supports Admissions, Academics, Library, Exams, Accounts & more</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script src="enhanced-scripts.js" defer></script>
+  <script>
+    // Simple logo loading - try different file names
+    document.addEventListener('DOMContentLoaded', function() {
+      const logo = document.getElementById('collegeLogo');
+      const fallback = document.getElementById('logoFallback');
+      
+      if (!logo) return;
+      
+      // List of possible logo file names to try
+      const logoFiles = [
+        'vel tech logo.png',
+        './vel tech logo.png',
+        'college-logo.svg',
+        './college-logo.svg',
+        'college-logo.png',
+        './college-logo.png'
+      ];
+      
+      let currentIndex = 0;
+      
+      function tryLoadLogo() {
+        if (currentIndex >= logoFiles.length) {
+          // All failed, show fallback
+          if (logo) logo.style.display = 'none';
+          if (fallback) fallback.style.display = 'inline-block';
+          return;
+        }
+        
+        const testImg = new Image();
+        testImg.onload = function() {
+          logo.src = logoFiles[currentIndex];
+          logo.style.display = 'block';
+          if (fallback) fallback.style.display = 'none';
+        };
+        testImg.onerror = function() {
+          currentIndex++;
+          tryLoadLogo();
+        };
+        testImg.src = logoFiles[currentIndex];
+      }
+      
+      // Check if logo already loaded successfully
+      if (logo.complete && logo.naturalHeight > 0) {
+        // Logo loaded successfully, do nothing
+        return;
+      }
+      
+      // Try loading logo
+      tryLoadLogo();
+    });
+  </script>
+</body>
+</html>
